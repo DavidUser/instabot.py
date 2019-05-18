@@ -62,6 +62,7 @@ class InstaBot:
 
     url = "https://www.instagram.com/"
     url_tag = "https://www.instagram.com/explore/tags/%s/?__a=1"
+    last_tag_cursor = None
     url_location = "https://www.instagram.com/explore/locations/%s/?__a=1"
     url_likes = "https://www.instagram.com/web/likes/%s/like/"
     url_unlike = "https://www.instagram.com/web/likes/%s/unlike/"
@@ -153,7 +154,7 @@ class InstaBot:
         password,
         like_per_day=1000,
         unlike_per_day=0,
-        media_max_like=150,
+        media_max_like=15000,
         media_min_like=0,
         user_max_follow=0,
         user_min_follow=0,
@@ -350,6 +351,7 @@ class InstaBot:
         self.instaload = instaloader.Instaloader()
 
     def check_for_bot_update(self):
+        return
         self.write_log("Checking for updates...")
 
         try:
@@ -672,12 +674,28 @@ class InstaBot:
                 self.by_location = False
                 self.write_log(f"Get Media by tag: {tag}")
                 if self.login_status == 1:
+                    root_key = "graphql"
                     url_tag = self.url_tag % (tag)
+
+                    if self.last_tag_cursor:
+                        root_key = "data"
+                        url_tag = 'https://www.instagram.com/graphql/query/?query_hash=f92f56d47dc7a55b606908374b43a314&variables=%7B"tag_name"%3A"ιnstahappy"%2C"show_ranked"%3Afalse%2C"first"%3A13%2C"after"%3A"' + self.last_tag_cursor[:-2] + '%3D%3D"%7D'
+                        print('loading page: ' + root_key + ' ' + url_tag)
+
                     try:
                         r = self.s.get(url_tag)
                         all_data = json.loads(r.text)
+                        if root_key not in all_data.keys():
+                            __import__('pprint').pprint(all_data)
+                            print('waitting...')
+                            self.last_tag_cursor = None
+                            time.sleep(60)
+                            return 0
+
+                        self.last_tag_cursor = all_data[root_key]["hashtag"]["edge_hashtag_to_media"]["page_info"]["end_cursor"]
+
                         self.media_by_tag = list(
-                            all_data["graphql"]["hashtag"]["edge_hashtag_to_media"][
+                            all_data[root_key]["hashtag"]["edge_hashtag_to_media"][
                                 "edges"
                             ]
                         )
@@ -1038,6 +1056,7 @@ class InstaBot:
         self.mainloop()
 
     def mainloop(self):
+        self.this_tag_like_count = 0
         while self.prog_run and self.login_status:
             now = datetime.datetime.now()
             if datetime.time(
@@ -1047,22 +1066,23 @@ class InstaBot:
             ):
                 # ------------------- Get media_id -------------------
                 if len(self.media_by_tag) == 0:
-                    self.get_media_id_by_tag(random.choice(self.tag_list))
-                    self.this_tag_like_count = 0
-                    self.max_tag_like_count = random.randint(
-                        1, self.max_like_for_one_tag
-                    )
-                    self.remove_already_liked()
+                    self.get_media_id_by_tag(self.tag_list[0])
+                    self.max_tag_like_count = self.max_like_for_one_tag
+                #   self.this_tag_like_count = 0
+                #    self.max_tag_like_count = random.randint(
+                #        1, self.max_like_for_one_tag
+                #    )
+                #    #self.remove_already_liked()
                 # ------------------- Like -------------------
                 self.new_auto_mod_like()
                 # ------------------- Unlike -------------------
-                self.new_auto_mod_unlike()
+                #self.new_auto_mod_unlike()
                 # ------------------- Follow -------------------
-                self.new_auto_mod_follow()
+                #self.new_auto_mod_follow()
                 # ------------------- Unfollow -------------------
-                self.new_auto_mod_unfollow()
+                #self.new_auto_mod_unfollow()
                 # ------------------- Comment -------------------
-                self.new_auto_mod_comments()
+                #self.new_auto_mod_comments()
                 # Bot iteration in 1 sec
                 time.sleep(1)
                 # print("Tic!")
